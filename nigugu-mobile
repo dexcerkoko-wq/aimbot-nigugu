@@ -1,0 +1,121 @@
+--// MOBILE AIMLOCK (SINGLEPLAYER)
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+
+-- Player & Camera
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- States
+local Enabled = false
+local Holding = false
+local LockedPlayer = nil
+
+-- Settings
+local SETTINGS = {
+	FOV_RADIUS = 120,
+	LOCK_PART = "HumanoidRootPart" -- tronco
+}
+
+--// UI FOV (mobile-safe)
+local Gui = Instance.new("ScreenGui")
+Gui.ResetOnSpawn = false
+Gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local FOV = Instance.new("Frame")
+FOV.Size = UDim2.fromOffset(SETTINGS.FOV_RADIUS * 2, SETTINGS.FOV_RADIUS * 2)
+FOV.AnchorPoint = Vector2.new(0.5, 0.5)
+FOV.BackgroundTransparency = 1
+FOV.Visible = false
+FOV.Parent = Gui
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Thickness = 2
+Stroke.Parent = FOV
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(1, 0)
+Corner.Parent = FOV
+
+-- Rainbow
+local function Rainbow()
+	return Color3.fromHSV((tick() % 5) / 5, 1, 1)
+end
+
+-- Get closest player
+local function GetClosest()
+	local closest = nil
+	local shortest = SETTINGS.FOV_RADIUS
+
+	for _,plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild(SETTINGS.LOCK_PART) then
+			local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+			if hum and hum.Health > 0 then
+				local pos, onScreen = Camera:WorldToViewportPoint(plr.Character[SETTINGS.LOCK_PART].Position)
+				if onScreen then
+					local touchPos = UIS:GetMouseLocation()
+					local dist = (Vector2.new(pos.X, pos.Y) - touchPos).Magnitude
+					if dist < shortest then
+						shortest = dist
+						closest = plr
+					end
+				end
+			end
+		end
+	end
+
+	return closest
+end
+
+-- Toggle button (mobile)
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.fromScale(0.18, 0.08)
+ToggleBtn.Position = UDim2.fromScale(0.8, 0.85)
+ToggleBtn.Text = "AIM: OFF"
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+ToggleBtn.TextColor3 = Color3.new(1,1,1)
+ToggleBtn.Parent = Gui
+
+ToggleBtn.Activated:Connect(function()
+	Enabled = not Enabled
+	Holding = false
+	LockedPlayer = nil
+	ToggleBtn.Text = Enabled and "AIM: ON" or "AIM: OFF"
+end)
+
+-- Touch control
+UIS.TouchStarted:Connect(function()
+	if Enabled then
+		Holding = true
+	end
+end)
+
+UIS.TouchEnded:Connect(function()
+	Holding = false
+	LockedPlayer = nil
+end)
+
+-- Main loop
+RunService.RenderStepped:Connect(function()
+	if Enabled then
+		FOV.Visible = true
+		FOV.Position = UDim2.fromOffset(UIS:GetMouseLocation().X, UIS:GetMouseLocation().Y)
+		Stroke.Color = Rainbow()
+	else
+		FOV.Visible = false
+	end
+
+	if not (Enabled and Holding) then return end
+
+	if not LockedPlayer or not LockedPlayer.Character then
+		LockedPlayer = GetClosest()
+	end
+
+	if LockedPlayer and LockedPlayer.Character and LockedPlayer.Character:FindFirstChild(SETTINGS.LOCK_PART) then
+		local targetPos = LockedPlayer.Character[SETTINGS.LOCK_PART].Position
+		Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPos)
+	end
+end)

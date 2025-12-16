@@ -1,0 +1,54 @@
+local a=game:GetService("Players");local b=game:GetService("RunService");local c=game:GetService("UserInputService");
+local e=a.LocalPlayer;local f=workspace.CurrentCamera;
+local g=false;local h=false;local i=nil;
+local j={FOV_RADIUS=90,LOCK_PART="Head"};
+local k=Drawing.new("Circle");k.Radius=j.FOV_RADIUS;k.Thickness=2;k.Filled=false;k.Transparency=1;k.Visible=false;
+
+local function l()return Color3.fromHSV(tick()%5/5,1,1)end;
+
+local function m()
+	local n=nil;local o=j.FOV_RADIUS;
+	for _,q in ipairs(a:GetPlayers())do
+		if q~=e and q.Character and q.Character:FindFirstChild(j.LOCK_PART)then
+			local r=q.Character:FindFirstChildOfClass("Humanoid");
+			if r and r.Health>0 then
+				local s,t=f:WorldToViewportPoint(q.Character[j.LOCK_PART].Position);
+				if t then
+					local u=c:GetMouseLocation();
+					local v=(Vector2.new(s.X,s.Y)-u).Magnitude;
+					if v<o then o=v;n=q end
+				end
+			end
+		end
+	end
+	return n
+end;
+
+local function w()i=nil;c.MouseDeltaSensitivity=1 end;
+
+c.InputBegan:Connect(function(x,y)
+	if y then return end;
+	if x.KeyCode==Enum.KeyCode.K then g=not g;h=false;w()end;
+	if g and x.UserInputType==Enum.UserInputType.MouseButton2 then h=true end
+end);
+
+c.InputEnded:Connect(function(x)
+	if x.UserInputType==Enum.UserInputType.MouseButton2 then h=false;w()end
+end);
+
+b.RenderStepped:Connect(function()
+	if g then
+		k.Visible=true;
+		k.Position=c:GetMouseLocation();
+		k.Color=l();
+	else
+		k.Visible=false
+	end;
+	if not(g and h)then return end;
+	if not i or not i.Character then i=m()end;
+	if i and i.Character and i.Character:FindFirstChild(j.LOCK_PART)then
+		local z=i.Character[j.LOCK_PART].Position;
+		f.CFrame=CFrame.new(f.CFrame.Position,z);
+		c.MouseDeltaSensitivity=0
+	end
+end)

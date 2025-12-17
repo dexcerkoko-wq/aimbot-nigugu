@@ -1,9 +1,10 @@
---// MOBILE AIMLOCK (SINGLEPLAYER)
+--// MOBILE AIMLOCK (SINGLEPLAYER) + UI EVOLUÍDA
 
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 -- Player & Camera
 local LocalPlayer = Players.LocalPlayer
@@ -17,47 +18,160 @@ local LockedPlayer = nil
 -- Settings
 local SETTINGS = {
 	FOV_RADIUS = 120,
-	LOCK_PART = "HumanoidRootPart" -- tronco
+	LOCK_PART = "HumanoidRootPart" -- troque para "Head" se quiser
 }
 
---// UI FOV (mobile-safe)
+------------------------------------------------
+-- GUI ROOT
+------------------------------------------------
+
 local Gui = Instance.new("ScreenGui")
+Gui.IgnoreGuiInset = true
 Gui.ResetOnSpawn = false
 Gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
+------------------------------------------------
+-- MINI POP-UP (CREDIT)
+------------------------------------------------
+
+local Popup = Instance.new("Frame")
+Popup.Size = UDim2.fromScale(0.35, 0.08)
+Popup.Position = UDim2.fromScale(0.5, -0.15)
+Popup.AnchorPoint = Vector2.new(0.5, 0.5)
+Popup.BackgroundColor3 = Color3.fromRGB(25,25,25)
+Popup.Parent = Gui
+
+local PopupCorner = Instance.new("UICorner")
+PopupCorner.CornerRadius = UDim.new(0,16)
+PopupCorner.Parent = Popup
+
+local PopupStroke = Instance.new("UIStroke")
+PopupStroke.Thickness = 2
+PopupStroke.Color = Color3.fromRGB(120,120,120)
+PopupStroke.Parent = Popup
+
+local PopupText = Instance.new("TextLabel")
+PopupText.Size = UDim2.fromScale(1,1)
+PopupText.BackgroundTransparency = 1
+PopupText.Text = "Made by: Dexcer"
+PopupText.Font = Enum.Font.GothamBold
+PopupText.TextScaled = true
+PopupText.TextColor3 = Color3.new(1,1,1)
+PopupText.Parent = Popup
+
+-- Animação do pop-up
+TweenService:Create(
+	Popup,
+	TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	{Position = UDim2.fromScale(0.5, 0.1)}
+):Play()
+
+task.delay(2.5, function()
+	TweenService:Create(
+		Popup,
+		TweenInfo.new(0.5),
+		{Position = UDim2.fromScale(0.5, -0.15)}
+	):Play()
+end)
+
+------------------------------------------------
+-- BOTÃO AIM (MOVÍVEL)
+------------------------------------------------
+
+local AimButton = Instance.new("TextButton")
+AimButton.Size = UDim2.fromScale(0.22, 0.09)
+AimButton.Position = UDim2.fromScale(0.5, 0.75)
+AimButton.AnchorPoint = Vector2.new(0.5, 0.5)
+AimButton.Text = "AIM: OFF"
+AimButton.Font = Enum.Font.GothamBold
+AimButton.TextScaled = true
+AimButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
+AimButton.TextColor3 = Color3.new(1,1,1)
+AimButton.Parent = Gui
+
+local AimCorner = Instance.new("UICorner")
+AimCorner.CornerRadius = UDim.new(0,18)
+AimCorner.Parent = AimButton
+
+------------------------------------------------
+-- BOTÃO ARRASTÁVEL (MOBILE)
+------------------------------------------------
+
+local dragging = false
+local dragOffset
+
+AimButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragOffset = input.Position - AimButton.AbsolutePosition
+	end
+end)
+
+AimButton.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch then
+		dragging = false
+	end
+end)
+
+UIS.InputChanged:Connect(function(input)
+	if dragging and input.UserInputType == Enum.UserInputType.Touch then
+		AimButton.Position = UDim2.fromOffset(
+			input.Position.X - dragOffset.X + AimButton.Size.X.Offset/2,
+			input.Position.Y - dragOffset.Y + AimButton.Size.Y.Offset/2
+		)
+	end
+end)
+
+------------------------------------------------
+-- FOV FIXO CENTRAL
+------------------------------------------------
+
 local FOV = Instance.new("Frame")
 FOV.Size = UDim2.fromOffset(SETTINGS.FOV_RADIUS * 2, SETTINGS.FOV_RADIUS * 2)
+FOV.Position = UDim2.fromScale(0.5, 0.5)
 FOV.AnchorPoint = Vector2.new(0.5, 0.5)
 FOV.BackgroundTransparency = 1
 FOV.Visible = false
 FOV.Parent = Gui
 
-local Stroke = Instance.new("UIStroke")
-Stroke.Thickness = 2
-Stroke.Parent = FOV
+local FOVStroke = Instance.new("UIStroke")
+FOVStroke.Thickness = 2
+FOVStroke.Parent = FOV
 
-local Corner = Instance.new("UICorner")
-Corner.CornerRadius = UDim.new(1, 0)
-Corner.Parent = FOV
+local FOVCorner = Instance.new("UICorner")
+FOVCorner.CornerRadius = UDim.new(1,0)
+FOVCorner.Parent = FOV
 
--- Rainbow
 local function Rainbow()
 	return Color3.fromHSV((tick() % 5) / 5, 1, 1)
 end
 
--- Get closest player
+------------------------------------------------
+-- TARGET LOGIC (CENTRO DA TELA)
+------------------------------------------------
+
 local function GetClosest()
 	local closest = nil
 	local shortest = SETTINGS.FOV_RADIUS
 
+	local center = Vector2.new(
+		Camera.ViewportSize.X / 2,
+		Camera.ViewportSize.Y / 2
+	)
+
 	for _,plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild(SETTINGS.LOCK_PART) then
+		if plr ~= LocalPlayer and plr.Character
+			and plr.Character:FindFirstChild(SETTINGS.LOCK_PART) then
+
 			local hum = plr.Character:FindFirstChildOfClass("Humanoid")
 			if hum and hum.Health > 0 then
-				local pos, onScreen = Camera:WorldToViewportPoint(plr.Character[SETTINGS.LOCK_PART].Position)
-				if onScreen then
-					local touchPos = UIS:GetMouseLocation()
-					local dist = (Vector2.new(pos.X, pos.Y) - touchPos).Magnitude
+				local pos, onscreen =
+					Camera:WorldToViewportPoint(
+						plr.Character[SETTINGS.LOCK_PART].Position
+					)
+
+				if onscreen then
+					local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
 					if dist < shortest then
 						shortest = dist
 						closest = plr
@@ -70,23 +184,24 @@ local function GetClosest()
 	return closest
 end
 
--- Toggle button (mobile)
-local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Size = UDim2.fromScale(0.18, 0.08)
-ToggleBtn.Position = UDim2.fromScale(0.8, 0.85)
-ToggleBtn.Text = "AIM: OFF"
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
-ToggleBtn.TextColor3 = Color3.new(1,1,1)
-ToggleBtn.Parent = Gui
+------------------------------------------------
+-- INPUT
+------------------------------------------------
 
-ToggleBtn.Activated:Connect(function()
+AimButton.Activated:Connect(function()
 	Enabled = not Enabled
 	Holding = false
 	LockedPlayer = nil
-	ToggleBtn.Text = Enabled and "AIM: ON" or "AIM: OFF"
+
+	if Enabled then
+		AimButton.Text = "AIM: ON"
+		AimButton.BackgroundColor3 = Color3.fromRGB(60,160,80)
+	else
+		AimButton.Text = "AIM: OFF"
+		AimButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	end
 end)
 
--- Touch control
 UIS.TouchStarted:Connect(function()
 	if Enabled then
 		Holding = true
@@ -98,12 +213,14 @@ UIS.TouchEnded:Connect(function()
 	LockedPlayer = nil
 end)
 
--- Main loop
+------------------------------------------------
+-- MAIN LOOP (ZERO DELAY)
+------------------------------------------------
+
 RunService.RenderStepped:Connect(function()
 	if Enabled then
 		FOV.Visible = true
-		FOV.Position = UDim2.fromOffset(UIS:GetMouseLocation().X, UIS:GetMouseLocation().Y)
-		Stroke.Color = Rainbow()
+		FOVStroke.Color = Rainbow()
 	else
 		FOV.Visible = false
 	end
@@ -114,8 +231,10 @@ RunService.RenderStepped:Connect(function()
 		LockedPlayer = GetClosest()
 	end
 
-	if LockedPlayer and LockedPlayer.Character and LockedPlayer.Character:FindFirstChild(SETTINGS.LOCK_PART) then
-		local targetPos = LockedPlayer.Character[SETTINGS.LOCK_PART].Position
-		Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPos)
+	if LockedPlayer and LockedPlayer.Character
+		and LockedPlayer.Character:FindFirstChild(SETTINGS.LOCK_PART) then
+
+		local pos = LockedPlayer.Character[SETTINGS.LOCK_PART].Position
+		Camera.CFrame = CFrame.new(Camera.CFrame.Position, pos)
 	end
 end)
